@@ -1,0 +1,60 @@
+name: DevOps Pipeline
+
+# 1. TRIGGER
+
+# When should this run?
+
+# On every push to main, and every Pull Request.
+
+on:
+  push:
+    branches: ["main"]
+
+  pull_request:
+    branches: ["main"]
+
+# 2. JOBS
+
+# Group of tasks to run
+
+jobs:
+  build-and-test:
+    # Use a standard Linux Virtual Machine
+
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step A: Download your code
+
+      - name: Checkout Code
+
+        uses: actions/checkout@v3
+
+      # Step B: Install Node.js
+
+      - name: Setup Node.js
+
+        uses: actions/setup-node@v3
+
+        with:
+          node-version: "18"
+
+      # Step C: Install dependencies (npm install)
+
+      - name: Install Dependencies
+
+        run: npm install
+
+      # Step D: SAST - Security Scan (Requirement!)
+
+      # We use npm audit to check for vulnerable libraries
+
+      - name: Security Scan (SAST)
+
+        run: npm run scan
+
+      # Step E: Run Tests (Even though we just echo 'success', it proves flow works)
+
+      - name: Run Tests
+
+        run: npm test
