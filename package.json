@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Warning: no test specified\" && exit 0",
-    "dev": "nodemon server.js",
+    "dev": "node server.js",
     "scan": "npm audit"
   },
   "keywords": [],
