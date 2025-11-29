@@ -1,8 +1,32 @@
 // @ts-check
 
 const express = require("express");
+const morgan = require("morgan"); //for obersavavility/mertics
 const app = express();
-app.use(express.json());
+const crypto = require("crypto"); // for creating unique id
+
+app.use(express.json()); //for post request
+
+app.use((req, res, next) => {
+  const traceId = crypto.randomUUID(); // Generate a random UUID (e.g., '1b9d6bcd-bbfd-4b2d-9b5d...')
+  req.traceId = traceId; // Attach it to the req object so we can use it later
+  res.set("X-Request-Id", traceId); // Send it back to the user in the Headers (Standard practice)
+  next();
+});
+
+// 2. LOGS (Structured)
+// We modify morgan to include the Trace ID in the logs
+morgan.token("id", (req) => req.traceId);
+// format: [ID] Method URL Status ResponseTime
+app.use(morgan("[:id] :method :url :status :response-time ms"));
+
+let requestCount = 0; // metrics
+
+//obersavavility/metrics middleware
+app.use((req, res, next) => {
+  requestCount++;
+  next();
+});
 
 const urlDBs = {};
 
@@ -12,6 +36,15 @@ app.get("/hi", (req, res) => {
 
 app.get("/all", (req, res) => {
   res.json(urlDBs);
+});
+
+//metrics endpoint
+app.get("/metrics", (req, res) => {
+  res.json({
+    status: "up",
+    totalRequests: requestCount,
+    uptime: process.uptime(), //  How long server has been running (in seconds)
+  });
 });
 
 app.post("/encode-url", (req, res) => {
