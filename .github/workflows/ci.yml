@@ -1,60 +1,52 @@
 name: DevOps Pipeline
 
-# 1. TRIGGER
-
-# When should this run?
-
-# On every push to main, and every Pull Request.
-
 on:
   push:
     branches: ["main"]
-
   pull_request:
     branches: ["main"]
 
-# 2. JOBS
-
-# Group of tasks to run
-
 jobs:
-  build-and-test:
-    # Use a standard Linux Virtual Machine
-
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step A: Download your code
-
+      # --- PHASE 1: CI (Continuous Integration) ---
       - name: Checkout Code
-
         uses: actions/checkout@v3
 
-      # Step B: Install Node.js
-
       - name: Setup Node.js
-
         uses: actions/setup-node@v3
-
         with:
           node-version: "18"
 
-      # Step C: Install dependencies (npm install)
-
       - name: Install Dependencies
-
         run: npm install
 
-      # Step D: SAST - Security Scan (Requirement!)
-
-      # We use npm audit to check for vulnerable libraries
-
       - name: Security Scan (SAST)
-
         run: npm run scan
 
-      # Step E: Run Tests (Even though we just echo 'success', it proves flow works)
-
-      - name: Run Tests
-
+      - name: Run Integration Tests
         run: npm test
+
+      # --- PHASE 2: CD (Continuous Deployment) ---
+      # We only run this if tests passed AND we are on the 'main' branch.
+
+      - name: Set up Docker Buildx
+        if: github.ref == 'refs/heads/main'
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Docker Image
+        if: github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/devops-project:latest
