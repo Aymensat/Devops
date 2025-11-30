@@ -97,6 +97,10 @@ app.delete("/:id", (req, res) => {
   return res.status(204).json({ message: "delete succeful" });
 });
 
-app.listen(process.env.PORT || 5000, () =>
-  console.log("server running on 5000")
-);
+module.exports = app; // for our tests to import and use
+
+if (require.main == module) {
+  app.listen(process.env.PORT || 5000, () =>
+    console.log("server running on 5000")
+  );
+}
