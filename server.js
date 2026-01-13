@@ -1,5 +1,3 @@
-// @ts-check
-
 const express = require("express");
 const morgan = require("morgan"); //for obersavavility/mertics
 const app = express();

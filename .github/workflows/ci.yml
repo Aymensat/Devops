@@ -50,7 +50,6 @@ jobs:
           context: .
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/devops-project:latest
-<<<<<<< HEAD
 
       # --- PHASE 3: DAST (Dynamic Application Security Testing) ---
       # Run the built Docker image and perform a DAST scan using OWASP ZAP.
@@ -83,5 +82,3 @@ jobs:
       - name: Stop Application after DAST
         if: always() # Ensure this step runs even if the ZAP scan or preceding steps fail
         run: docker stop my-app && docker rm my-app
-=======
->>>>>>> main
