@@ -1,6 +1,6 @@
 name: DevOps Security Pipeline
 
-# Rules: Trigger on push to main OR pull request against main
+# Rules: Run on push to main or PR against main
 on:
   push:
     branches: ["main"]
@@ -29,44 +29,45 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/devops-project:latest
 
-      # --- PHASE 3: DAST (Dynamic Application Security Testing) ---
-      # Run the built Docker image and perform a DAST scan using OWASP ZAP.
+      # --- PHASE 2: DAST (Dynamic Application Security Testing) ---
 
       - name: Run Application for DAST
         run: |
-          # We use --network="host" so the app runs directly on the runner's network
+          # Run the app in the background (-d) attached to the host network
+          # This makes the app accessible at localhost:5000 inside the runner
           docker run -d --name my-app --network="host" ${{ secrets.DOCKER_USERNAME }}/devops-project:latest
-          echo "Waiting for application to start for DAST scan..."
-          # A simple sleep; in a more robust setup, use a health check.
+
+          echo "Waiting for application to initialize..."
           sleep 15
 
       - name: Run OWASP ZAP Scan
-        # REPLACED BROKEN ACTION with raw Docker command for better control
         run: |
-          # 1. Create a folder for reports with open permissions (fix for ZAP permission errors)
+          # 1. Create a directory for reports and give it open permissions
+          # This prevents "Permission Denied" errors when Docker writes files back to the runner
           mkdir -p zap-workdir
           chmod 777 zap-workdir
 
-          # 2. Run ZAP using the stable Docker image
-          # --network="host": Allows ZAP to see the app running on localhost:5000
-          # -v ...: Maps the folder so we can get the report back
+          # 2. Run ZAP Baseline Scan using Docker
+          # --network="host" : Allows ZAP to talk to localhost:5000
+          # -v $(pwd)...     : Maps the current folder so we can save the report
+          # -t .../hi        : TARGET CHANGED to '/hi' because your app has no root '/' route!
           docker run --network="host" \
             -v $(pwd)/zap-workdir:/zap/wrk/:rw \
             ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-            -t http://localhost:5000 \
+            -t http://localhost:5000/hi \
             -r zap_report.html \
             -J zap_report.json || echo "ZAP found issues, but continuing..."
 
       - name: Upload ZAP Report Artifact
         uses: actions/upload-artifact@v4
-        if: always() # Run even if vulnerabilities are found
+        if: always() # Run this even if ZAP finds security flaws
         with:
           name: zap-report
           path: |
-            zap-workdir/zap_report.html # ZAP's default HTML report name
-            zap-workdir/zap_report.json # ZAP's default JSON report name
-          retention-days: 5 # Keep reports for 5 days
+            zap-workdir/zap_report.html
+            zap-workdir/zap_report.json
+          retention-days: 5
 
       - name: Stop Application after DAST
-        if: always() # Ensure this step runs even if the ZAP scan or preceding steps fail
+        if: always()
         run: docker stop my-app && docker rm my-app
