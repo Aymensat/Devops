@@ -1,21 +1,42 @@
 name: DevOps Security Pipeline
 
-# Rules: Run on push to main or PR against main
+# Rules: Run on push to main, PR against main, OR Manually
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
   pull_request:
-    branches: ["main"]
+    branches: [ "main" ]
+  # This allows you to click a "Run Workflow" button in GitHub Actions tab
+  workflow_dispatch:
 
 jobs:
   build-test-scan:
     runs-on: ubuntu-latest
 
     steps:
-      # --- PHASE 1: SETUP & BUILD ---
+      # --- PHASE 1: SETUP & CODE CHECKS ---
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci # 'npm ci' is faster/cleaner than 'npm install' for CI servers
+
+      - name: Run SAST Scan (npm audit)
+        # Checks for security vulnerabilities in dependencies
+        # We use || true so it shows the vulnerabilities but doesn't break the build if one is found
+        run: npm audit --audit-level=high || true 
+
+      - name: Run Unit Tests
+        # Runs Jest using your 'npm test' script
+        run: npm test
+
+      # --- PHASE 2: CONTAINERIZATION ---
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -29,28 +50,18 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/devops-project:latest
 
-      # --- PHASE 2: DAST (Dynamic Application Security Testing) ---
-
+      # --- PHASE 3: DAST (Runtime Security) ---
       - name: Run Application for DAST
         run: |
-          # Run the app in the background (-d) attached to the host network
-          # This makes the app accessible at localhost:5000 inside the runner
           docker run -d --name my-app --network="host" ${{ secrets.DOCKER_USERNAME }}/devops-project:latest
-
-          echo "Waiting for application to initialize..."
+          echo "Waiting 15s for app to start..."
           sleep 15
 
       - name: Run OWASP ZAP Scan
         run: |
-          # 1. Create a directory for reports and give it open permissions
-          # This prevents "Permission Denied" errors when Docker writes files back to the runner
           mkdir -p zap-workdir
           chmod 777 zap-workdir
-
-          # 2. Run ZAP Baseline Scan using Docker
-          # --network="host" : Allows ZAP to talk to localhost:5000
-          # -v $(pwd)...     : Maps the current folder so we can save the report
-          # -t .../hi        : TARGET CHANGED to '/hi' because your app has no root '/' route!
+          
           docker run --network="host" \
             -v $(pwd)/zap-workdir:/zap/wrk/:rw \
             ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
@@ -60,14 +71,12 @@ jobs:
 
       - name: Upload ZAP Report Artifact
         uses: actions/upload-artifact@v4
-        if: always() # Run this even if ZAP finds security flaws
+        if: always()
         with:
           name: zap-report
-          path: |
-            zap-workdir/zap_report.html
-            zap-workdir/zap_report.json
+          path: zap-workdir/zap_report.html
           retention-days: 5
 
-      - name: Stop Application after DAST
+      - name: Cleanup
         if: always()
         run: docker stop my-app && docker rm my-app
