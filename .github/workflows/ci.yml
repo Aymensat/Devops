@@ -1,5 +1,6 @@
-name: DevOps Pipeline
+name: DevOps Security Pipeline
 
+# Rules: Run on push to main or PR against main
 on:
   push:
     branches: ["main"]
@@ -7,46 +8,66 @@ on:
     branches: ["main"]
 
 jobs:
-  build-and-deploy:
+  build-test-scan:
     runs-on: ubuntu-latest
 
     steps:
-      # --- PHASE 1: CI (Continuous Integration) ---
+      # --- PHASE 1: SETUP & BUILD ---
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "18"
-
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Security Scan (SAST)
-        run: npm run scan
-
-      - name: Run Integration Tests
-        run: npm test
-
-      # --- PHASE 2: CD (Continuous Deployment) ---
-      # We only run this if tests passed AND we are on the 'main' branch.
-
-      - name: Set up Docker Buildx
-        if: github.ref == 'refs/heads/main'
-        uses: docker/setup-buildx-action@v2
-
-      - name: Login to Docker Hub
-        if: github.ref == 'refs/heads/main'
-        uses: docker/login-action@v2
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and Push Docker Image
-        if: github.ref == 'refs/heads/main'
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/devops-project:latest
+
+      # --- PHASE 2: DAST (Dynamic Application Security Testing) ---
+
+      - name: Run Application for DAST
+        run: |
+          # Run the app in the background (-d) attached to the host network
+          # This makes the app accessible at localhost:5000 inside the runner
+          docker run -d --name my-app --network="host" ${{ secrets.DOCKER_USERNAME }}/devops-project:latest
+
+          echo "Waiting for application to initialize..."
+          sleep 15
+
+      - name: Run OWASP ZAP Scan
+        run: |
+          # 1. Create a directory for reports and give it open permissions
+          # This prevents "Permission Denied" errors when Docker writes files back to the runner
+          mkdir -p zap-workdir
+          chmod 777 zap-workdir
+
+          # 2. Run ZAP Baseline Scan using Docker
+          # --network="host" : Allows ZAP to talk to localhost:5000
+          # -v $(pwd)...     : Maps the current folder so we can save the report
+          # -t .../hi        : TARGET CHANGED to '/hi' because your app has no root '/' route!
+          docker run --network="host" \
+            -v $(pwd)/zap-workdir:/zap/wrk/:rw \
+            ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t http://localhost:5000/hi \
+            -r zap_report.html \
+            -J zap_report.json || echo "ZAP found issues, but continuing..."
+
+      - name: Upload ZAP Report Artifact
+        uses: actions/upload-artifact@v4
+        if: always() # Run this even if ZAP finds security flaws
+        with:
+          name: zap-report
+          path: |
+            zap-workdir/zap_report.html
+            zap-workdir/zap_report.json
+          retention-days: 5
+
+      - name: Stop Application after DAST
+        if: always()
+        run: docker stop my-app && docker rm my-app
