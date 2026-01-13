@@ -62,7 +62,8 @@ jobs:
           sleep 15 
 
       - name: Run OWASP ZAP Scan
-                  uses: zaproxy/action@v0.10.0        with:
+                  uses: zaproxy/action@v0.10.0
+        with:
           target: 'http://localhost:5000' # Target the application running on the runner
           format: 'html,json' # Output HTML and JSON reports
           fail_action_on_alert: false # Do not fail the action for alerts, just report them
