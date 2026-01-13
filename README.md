@@ -1,5 +1,3 @@
 # Devops
 
-Nice College Devops project
-
-work in progress
+WIP , only project report left 
