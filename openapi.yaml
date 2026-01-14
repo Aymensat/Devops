@@ -1,0 +1,125 @@
+openapi: 3.0.0
+info:
+  title: DevOps Project - URL Shortener API
+  description: A simple URL shortener API built as a DevOps project.
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000
+    description: Local development server
+
+paths:
+  /hi:
+    get:
+      summary: Health check endpoint
+      description: Returns a simple "hii" message to confirm the server is running.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: hii
+
+  /all:
+    get:
+      summary: Get all stored URLs
+      description: Retrieves a JSON object containing all the shortened URL mappings.
+      responses:
+        '200':
+          description: A JSON object of URL mappings.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+                example:
+                  "abcdef": "https://google.com"
+
+  /metrics:
+    get:
+      summary: Get application metrics
+      description: Provides simple application metrics like request count and uptime.
+      responses:
+        '200':
+          description: A JSON object with application metrics.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "up"
+                  totalRequests:
+                    type: integer
+                    example: 100
+                  uptime:
+                    type: number
+                    format: float
+                    example: 3600.5
+
+  /encode-url:
+    post:
+      summary: Create a shortened URL
+      description: Takes a full URL and returns a shortened code for it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  example: "https://www.google.com"
+      responses:
+        '200':
+          description: Successfully created the shortened URL.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decodedUrl:
+                    type: string
+                    format: uri
+                  encodedUrl:
+                    type: string
+        '400':
+          description: Bad request, either URL is missing or malformed.
+
+  /{id}:
+    get:
+      summary: Redirect to original URL
+      description: Takes a shortened ID and redirects the user to the original URL.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirects to the original URL.
+        '404':
+          description: The specified ID was not found.
+    delete:
+      summary: Delete a shortened URL
+      description: Deletes a URL mapping by its shortened ID.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Successfully deleted the URL.
+        '404':
+          description: The specified ID was not found.
